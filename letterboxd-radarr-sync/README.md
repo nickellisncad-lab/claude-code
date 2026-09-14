@@ -28,6 +28,16 @@ Run this on the machine that runs Radarr, or anywhere that can reach it.
 ```bash
 git clone https://github.com/nickellisncad-lab/claude-code.git
 cd claude-code/letterboxd-radarr-sync
+./setup.sh
+```
+
+`setup.sh` asks for the four Radarr values below, writes `.env` with correct
+permissions, and runs the read-only connectivity check. It never overwrites an
+existing `.env` without asking and writes nothing to Radarr.
+
+To do it by hand instead:
+
+```bash
 cp .env.example .env
 $EDITOR .env
 chmod 600 .env          # it holds your Radarr API key
@@ -135,6 +145,11 @@ Two knobs, and they do different jobs:
   since an add that starts no search downloads nothing.
 - `MAX_ADDS_PER_RUN=1` caps adds per pass regardless of the queue, which still
   applies when searching is off.
+
+With the shipped defaults these two produce **identical** behaviour: the queue
+gate already allows only one add per pass, so `MAX_ADDS_PER_RUN=1` and `0` do
+the same thing here. Leave it at `1` — it costs nothing and still protects you
+if the queue reading is ever wrong or you turn searching off.
 
 ### What this does *not* control
 

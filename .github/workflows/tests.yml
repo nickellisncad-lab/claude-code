@@ -1,0 +1,48 @@
+name: tests
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+
+jobs:
+  pytest:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: letterboxd-radarr-sync
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: letterboxd-radarr-sync/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  docker:
+    name: docker image builds and runs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t lbxd-sync:ci letterboxd-radarr-sync
+      # Proves the entrypoint works with only src/ copied in, which is the
+      # part that cannot be checked without a Docker daemon.
+      - name: Entrypoint runs
+        run: docker run --rm lbxd-sync:ci --version
+      - name: Missing config exits cleanly rather than crashing
+        run: |
+          set +e
+          output=$(docker run --rm lbxd-sync:ci --once 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          test $code -eq 2 || { echo "expected exit 2, got $code"; exit 1; }
+          echo "$output" | grep -q "LETTERBOXD_USERS is required"
