@@ -113,3 +113,64 @@ def test_retries_then_succeeds_on_server_error(fixture):
     watchlist = client.fetch_watchlist("nickelliis")
 
     assert watchlist.films == []
+
+
+def test_tmdb_id_comes_from_the_film_footer_not_elsewhere(fixture):
+    """A TMDB link elsewhere on the page must not be mistaken for this film."""
+    html = fixture("film_page.html").replace(
+        "<body>",
+        '<body><section class="related"><a href="https://www.themoviedb.org/movie/999999/">Other</a></section>',
+    )
+
+    assert extract_tmdb_id(html) == 496243
+
+
+def test_multi_valued_attributes_do_not_crash_the_parser():
+    """BeautifulSoup returns a list for some attributes; .strip() would raise."""
+    html = """
+    <h1>someone wants to see 1 film</h1>
+    <ul class="grid"><li class="griditem">
+      <div class="react-component poster" data-item-slug="dune-part-two"
+           data-item-name="Dune: Part Two"
+           data-item-full-display-name="Dune: Part Two (2024)"></div>
+    </li></ul>
+    """
+    films, _, _ = parse_watchlist_page(html)
+
+    assert films[0].slug == "dune-part-two"
+    assert films[0].year == 2024
+
+
+@responses.activate
+def test_pagination_continues_when_the_paginator_is_missing(fixture):
+    """If the paginator markup changes, fall back to the header count.
+
+    Otherwise a 148-film watchlist silently syncs only its first page.
+    """
+    page1 = fixture("watchlist_page1.html").replace('class="pagination"', 'class="gone"')
+    page2 = fixture("watchlist_page2.html").replace('class="pagination"', 'class="gone"')
+    responses.add(responses.GET, "https://letterboxd.com/nickelliis/watchlist/", body=page1)
+    responses.add(
+        responses.GET, "https://letterboxd.com/nickelliis/watchlist/page/2/", body=page2
+    )
+
+    client = LetterboxdClient(user_agent="test", delay=0)
+    watchlist = client.fetch_watchlist("nickelliis")
+
+    assert len(watchlist.films) == 3
+
+
+@responses.activate
+def test_repeated_page_content_terminates_the_scrape(fixture):
+    """An out-of-range page that echoes earlier content must not loop forever."""
+    page1 = fixture("watchlist_page1.html").replace('class="pagination"', 'class="gone"')
+    responses.add(responses.GET, "https://letterboxd.com/nickelliis/watchlist/", body=page1)
+    for _ in range(10):
+        responses.add(
+            responses.GET, "https://letterboxd.com/nickelliis/watchlist/page/2/", body=page1
+        )
+
+    client = LetterboxdClient(user_agent="test", delay=0)
+    watchlist = client.fetch_watchlist("nickelliis")
+
+    assert len(watchlist.films) == 2

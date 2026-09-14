@@ -156,6 +156,15 @@ class RadarrClient:
             ids.append(tag_id)
         return ids
 
+    def queue_count(self) -> int:
+        """How many items Radarr currently has in its download queue."""
+        result = self._json("GET", "queue", params={"page": 1, "pageSize": 1})
+        if isinstance(result, dict):
+            return int(result.get("totalRecords", 0))
+        if isinstance(result, list):
+            return len(result)
+        return 0
+
     def lookup_by_tmdb(self, tmdb_id: int) -> dict | None:
         """Look a movie up in Radarr's metadata by TMDB id."""
         result = self._json(

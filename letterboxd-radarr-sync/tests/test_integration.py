@@ -17,6 +17,9 @@ def _radarr_preflight():
         responses.GET, f"{RADARR}/qualityprofile", json=[{"id": 4, "name": "HD-1080p"}]
     )
     responses.add(responses.GET, f"{RADARR}/tag", json=[{"id": 2, "label": "letterboxd"}])
+    responses.add(
+        responses.GET, f"{RADARR}/queue", json={"totalRecords": 0, "records": []}
+    )
 
 
 def _env(monkeypatch, tmp_path, **overrides):

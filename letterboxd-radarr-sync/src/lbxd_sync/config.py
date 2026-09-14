@@ -75,6 +75,9 @@ class Config:
     search_on_add: bool = True
     tags: list[str] = field(default_factory=list)
 
+    max_active_downloads: int = 1
+    max_adds_per_run: int = 1
+
     poll_interval: int = 3600
     state_path: str = "/data/state.db"
     seed_on_first_run: bool = True
@@ -108,6 +111,14 @@ class Config:
                 f"{sorted(VALID_AVAILABILITY)}, got {availability!r}"
             )
 
+        max_active = _int("MAX_ACTIVE_DOWNLOADS", 1)
+        if max_active < 0:
+            raise ConfigError("MAX_ACTIVE_DOWNLOADS must be 0 or more (0 = unlimited)")
+
+        max_adds = _int("MAX_ADDS_PER_RUN", 1)
+        if max_adds < 0:
+            raise ConfigError("MAX_ADDS_PER_RUN must be 0 or more (0 = unlimited)")
+
         interval = _int("POLL_INTERVAL", 3600)
         if interval < 60:
             raise ConfigError("POLL_INTERVAL must be at least 60 seconds")
@@ -122,6 +133,8 @@ class Config:
             monitor=_bool("RADARR_MONITOR", True),
             search_on_add=_bool("RADARR_SEARCH_ON_ADD", True),
             tags=_list("RADARR_TAGS"),
+            max_active_downloads=max_active,
+            max_adds_per_run=max_adds,
             poll_interval=interval,
             state_path=_str("STATE_PATH", "/data/state.db"),
             seed_on_first_run=_bool("SEED_ON_FIRST_RUN", True),

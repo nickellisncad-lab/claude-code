@@ -50,7 +50,7 @@ DONE_STATUSES = {"added", "exists", "no_tmdb_id"}
 # Non-terminal statuses: the film was seen and attempted but never actually
 # reached Radarr, so it must be picked up again on the next pass even though
 # it is no longer "new" to the watchlist.
-RETRY_STATUSES = {"dry_run", "error"}
+RETRY_STATUSES = {"dry_run", "error", "deferred", "pending"}
 
 
 def _now() -> str:

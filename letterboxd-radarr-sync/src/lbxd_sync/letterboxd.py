@@ -83,14 +83,30 @@ class Watchlist:
     """The count Letterboxd printed in the page header, when we could read it."""
 
 
+def _attr_text(value) -> str:
+    """Normalise an attribute value to text.
+
+    BeautifulSoup hands back a list for multi-valued attributes; calling
+    .strip() on one raises and would take down the whole sync pass.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return " ".join(str(part) for part in value).strip()
+    return str(value).strip()
+
+
 def _first_attr(element, attrs: tuple[str, ...]) -> str | None:
     """Return the first of ``attrs`` present on ``element`` or its descendants."""
     for attr in attrs:
-        if element.has_attr(attr) and element[attr].strip():
-            return element[attr].strip()
+        own = _attr_text(element.get(attr))
+        if own:
+            return own
         found = element.select_one(f"[{attr}]")
-        if found is not None and found.get(attr, "").strip():
-            return found[attr].strip()
+        if found is not None:
+            nested = _attr_text(found.get(attr))
+            if nested:
+                return nested
     return None
 
 
@@ -159,6 +175,16 @@ def extract_tmdb_id(html: str) -> int | None:
     Returns None for entries with no TMDB movie link -- TV series link to
     ``/tv/`` instead, and a few obscure entries have no link at all.
     """
+    soup = BeautifulSoup(html, "lxml")
+
+    # Prefer the film's own details footer, so a TMDB link anywhere else on
+    # the page cannot be mistaken for this film's id.
+    for container in soup.select("p.text-link, .text-footer"):
+        for anchor in container.select("a[href]"):
+            match = _TMDB_MOVIE_RE.search(anchor["href"])
+            if match:
+                return int(match.group(1))
+
     match = _TMDB_MOVIE_RE.search(html)
     return int(match.group(1)) if match else None
 
@@ -255,22 +281,39 @@ class LetterboxdClient:
                         "films -- Letterboxd markup has probably changed"
                     )
 
-            for film in page_films:
-                if film.slug not in seen:
-                    seen.add(film.slug)
-                    films.append(film)
+            new_on_page = [film for film in page_films if film.slug not in seen]
+            for film in new_on_page:
+                seen.add(film.slug)
+                films.append(film)
 
-            if not page_films:
+            # Nothing new: either a genuinely empty page, or a page number past
+            # the end that echoed content we already have. Either way, stop.
+            if not new_on_page:
                 break
-            if last_page is not None and page >= last_page:
+
+            if last_page is not None:
+                if page >= last_page:
+                    break
+            elif stated_total is None or len(films) >= stated_total:
+                # No paginator on the page. Trust the header count if we have
+                # one, so a paginator markup change does not truncate the list.
                 break
-            if last_page is None:
-                break
+
             page += 1
 
-        if stated_total is not None and len(films) != stated_total:
-            # Not fatal: the header count includes entries the grid may filter
-            # out, and the list can change between page fetches.
+        if stated_total is not None and len(films) < stated_total:
+            # Not fatal -- the header count can include entries the grid
+            # filters out, and the list can change between page fetches -- but
+            # a large shortfall usually means pagination broke, and a film we
+            # never see is a film that never syncs.
+            log.warning(
+                "%s: scraped %d films but the page header said %d; "
+                "some watchlist entries may have been missed",
+                username,
+                len(films),
+                stated_total,
+            )
+        elif stated_total is not None and len(films) > stated_total:
             log.info(
                 "%s: scraped %d films, page header said %d",
                 username,

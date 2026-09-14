@@ -37,10 +37,17 @@ class FakeLetterboxd:
 
 
 class FakeRadarr:
-    def __init__(self):
+    def __init__(self, queue: int = 0):
         self.added: list[int] = []
         self.library: set[int] = set()
         self.next_id = 100
+        self.queue = queue
+        self.queue_error: Exception | None = None
+
+    def queue_count(self):
+        if self.queue_error:
+            raise self.queue_error
+        return self.queue
 
     def system_status(self):
         return {"version": "5.2.6"}
@@ -73,6 +80,8 @@ def make_config(**overrides) -> Config:
         state_path=":memory:",
         seed_on_first_run=True,
         request_delay=0.0,
+        max_active_downloads=0,
+        max_adds_per_run=0,
     )
     base.update(overrides)
     return Config(**base)
@@ -270,3 +279,30 @@ def test_transient_radarr_error_is_retried_next_pass(store):
 
     assert radarr.added == [TMDB["parasite-2019"]]
     assert recovered.added == 1
+
+
+def test_crash_between_seen_and_request_does_not_lose_the_film(store):
+    """A film marked seen but never requested must still be recoverable."""
+    lb = FakeLetterboxd({"nickelliis": [], "karlasalgadox": []})
+    radarr = FakeRadarr()
+    syncer = Syncer(make_config(), lb, radarr, store)
+    syncer.run_once()
+
+    def die(film, summary):
+        raise KeyboardInterrupt("SIGKILL-ish")
+
+    lb.watchlists["nickelliis"] = [PARASITE]
+    syncer._request_film = die
+    with pytest.raises(KeyboardInterrupt):
+        syncer.run_once()
+
+    # The slug is now recorded as seen, so it is no longer "new"...
+    assert "parasite-2019" in store.seen_slugs("nickelliis")
+    # ...but it is still pending, so the next pass picks it up anyway.
+    assert store.film_status("parasite-2019") == "pending"
+
+    syncer._request_film = Syncer._request_film.__get__(syncer)
+    summary = syncer.run_once()
+
+    assert radarr.added == [TMDB["parasite-2019"]]
+    assert summary.added == 1

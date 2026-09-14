@@ -22,6 +22,7 @@ class SyncSummary:
     added: int = 0
     already_in_radarr: int = 0
     skipped_no_tmdb: int = 0
+    deferred: int = 0
     failed: int = 0
     user_errors: dict[str, str] = field(default_factory=dict)
 
@@ -37,6 +38,8 @@ class SyncSummary:
         ]
         if self.skipped_no_tmdb:
             parts.append(f"{self.skipped_no_tmdb} skipped (no TMDB id)")
+        if self.deferred:
+            parts.append(f"{self.deferred} deferred to a later pass")
         if self.failed:
             parts.append(f"{self.failed} failed")
         if self.user_errors:
@@ -116,10 +119,77 @@ class Syncer:
             log.info("no new watchlist entries")
             return summary
 
+        budget = self._add_budget()
+        if budget == 0:
+            log.info(
+                "%d film(s) waiting, but no download slots free right now",
+                len(pending),
+            )
+
+        started = 0
         for film in pending.values():
-            self._request_film(film, summary)
+            if budget is not None and started >= budget:
+                self._defer(film, summary)
+                continue
+            # Only an add that actually kicks off a download spends budget;
+            # a skip, a duplicate, or an error does not.
+            if self._request_film(film, summary) == "added":
+                started += 1
 
         return summary
+
+    def _add_budget(self) -> int | None:
+        """How many movies we may add this pass. None means unlimited.
+
+        Two independent caps: how many downloads Radarr may have running at
+        once, and how many adds any single pass may make.
+
+        This throttles what *we* hand to Radarr. It cannot stop Radarr from
+        later grabbing a movie on its own -- a monitored film that was not
+        available when added gets picked up by Radarr's own RSS sync. The
+        hard ceiling on concurrent downloads lives in the download client.
+        """
+        caps: list[int] = []
+
+        if self.config.max_adds_per_run > 0:
+            caps.append(self.config.max_adds_per_run)
+
+        # The queue cap only means anything when adding also starts a search.
+        # With RADARR_SEARCH_ON_ADD=false an add downloads nothing, so the
+        # queue depth is irrelevant to it.
+        if self.config.max_active_downloads > 0 and self.config.search_on_add:
+            if self.config.dry_run:
+                # Never let a dry run's report depend on live queue depth.
+                caps.append(self.config.max_active_downloads)
+            else:
+                try:
+                    active = self.radarr.queue_count()
+                except RadarrError as exc:
+                    # Failing closed is the safe direction: if we cannot tell
+                    # how much is downloading, do not start more.
+                    log.warning("could not read the Radarr queue (%s); deferring", exc)
+                    return 0
+                free = max(0, self.config.max_active_downloads - active)
+                log.info(
+                    "Radarr queue has %d item(s); %d download slot(s) free",
+                    active,
+                    free,
+                )
+                caps.append(free)
+
+        return min(caps) if caps else None
+
+    def _defer(self, film: Film, summary: SyncSummary) -> None:
+        """Hold a film back for a later pass without losing track of it."""
+        log.info("%s: deferred, download slots are full", film)
+        self.store.record_film(
+            film.slug,
+            status="deferred",
+            title=film.title,
+            year=film.year,
+            detail="waiting for a free download slot",
+        )
+        summary.deferred += 1
 
     def _collect_new_films(self, username: str, summary: SyncSummary) -> list[Film]:
         """Return watchlist entries for ``username`` we have not handled yet."""
@@ -158,9 +228,17 @@ class Syncer:
             self.store.forget_seen(username, removed)
             log.info("%s: %d films removed from watchlist", username, len(removed))
 
-        self.store.record_seen(username, new_slugs)
-
         fresh = [current[slug] for slug in new_slugs if not self.store.is_done(slug)]
+
+        # Mark each newly discovered film pending *before* recording it as
+        # seen. If we die between here and the Radarr call, the film still has
+        # a retryable row; without it, the slug would be "seen" but have no
+        # outcome, so it would never look new again and never be retried.
+        for film in fresh:
+            self.store.record_film(
+                film.slug, status="pending", title=film.title, year=film.year
+            )
+        self.store.record_seen(username, new_slugs)
 
         # Films we saw before but never got into Radarr -- a dry run, or a
         # transient Radarr or network error. They are no longer "new", so
@@ -181,10 +259,13 @@ class Syncer:
             )
         if retries:
             log.info("%s: retrying %d previously unresolved films", username, len(retries))
-        return fresh + retries
+        return retries + fresh
 
-    def _request_film(self, film: Film, summary: SyncSummary) -> None:
-        """Resolve one film to a TMDB id and hand it to Radarr."""
+    def _request_film(self, film: Film, summary: SyncSummary) -> str:
+        """Resolve one film to a TMDB id and hand it to Radarr.
+
+        Returns the status recorded for the film.
+        """
         try:
             tmdb_id = self.letterboxd.fetch_tmdb_id(film.slug)
         except LetterboxdError as exc:
@@ -197,7 +278,7 @@ class Syncer:
                 detail=str(exc),
             )
             summary.failed += 1
-            return
+            return "error"
 
         if tmdb_id is None:
             # Usually a TV series or an untracked entry; nothing Radarr can do.
@@ -210,7 +291,7 @@ class Syncer:
                 detail="no TMDB movie link on the Letterboxd film page",
             )
             summary.skipped_no_tmdb += 1
-            return
+            return "no_tmdb_id"
 
         if self.config.dry_run:
             log.info("dry run: would add %s (TMDB %d) to Radarr", film, tmdb_id)
@@ -222,7 +303,7 @@ class Syncer:
                 tmdb_id=tmdb_id,
             )
             summary.added += 1
-            return
+            return "dry_run"
 
         try:
             result = self.radarr.add_movie(
@@ -244,7 +325,7 @@ class Syncer:
                 tmdb_id=tmdb_id,
             )
             summary.already_in_radarr += 1
-            return
+            return "exists"
         except RadarrError as exc:
             log.error("%s: Radarr rejected the add: %s", film, exc)
             self.store.record_film(
@@ -256,7 +337,7 @@ class Syncer:
                 detail=str(exc),
             )
             summary.failed += 1
-            return
+            return "error"
 
         if result.already_existed:
             log.info("%s: already in Radarr", film)
@@ -279,3 +360,4 @@ class Syncer:
             tmdb_id=tmdb_id,
             radarr_id=result.radarr_id,
         )
+        return status

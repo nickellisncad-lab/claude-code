@@ -71,11 +71,42 @@ list. The ones worth knowing about:
 | `RADARR_ROOT_FOLDER` | *required* | Must match a configured Radarr root folder. |
 | `RADARR_QUALITY_PROFILE` | *required* | Profile name or numeric id. |
 | `RADARR_SEARCH_ON_ADD` | `true` | `false` adds without searching. |
+| `MAX_ACTIVE_DOWNLOADS` | `1` | Hold off adding while Radarr's queue is this deep. `0` = no limit. |
+| `MAX_ADDS_PER_RUN` | `1` | Cap adds per pass regardless of queue. `0` = no limit. |
 | `RADARR_TAGS` | — | Created in Radarr if absent. Handy for filtering later. |
 | `POLL_INTERVAL` | `3600` | Seconds. Minimum 60. |
 | `SEED_ON_FIRST_RUN` | `true` | See above. |
 | `DRY_RUN` | `false` | Log intended adds, write nothing. |
 | `REQUEST_DELAY` | `1.0` | Seconds between Letterboxd requests. |
+
+## One movie at a time
+
+By default this adds **at most one movie per pass, and only when Radarr's
+download queue is empty**. Anything else found in the same pass is recorded as
+`deferred` and picked up on a later pass — deferred films are tried *before*
+newly discovered ones, so a backlog item can't be starved by a steady trickle
+of new watchlist additions.
+
+If the Radarr queue can't be read, the pass **defers rather than adds**. Failing
+closed is the right direction when the question is "is something already
+downloading?".
+
+Two knobs, and they do different jobs:
+
+- `MAX_ACTIVE_DOWNLOADS=1` is the real one-at-a-time gate. It reads Radarr's
+  queue before adding. It only means anything when `RADARR_SEARCH_ON_ADD=true`,
+  since an add that starts no search downloads nothing.
+- `MAX_ADDS_PER_RUN=1` caps adds per pass regardless of the queue, which still
+  applies when searching is off.
+
+### What this does *not* control
+
+This throttles what **we** hand to Radarr. It cannot stop Radarr from starting a
+download on its own: a monitored film that wasn't available when added gets
+picked up later by Radarr's own RSS sync, outside our control. If you need a
+hard ceiling on concurrent downloads, set it in the **download client**
+(qBittorrent's "Maximum active downloads", SABnzbd's queue settings) — that is
+the only place it's genuinely enforced.
 
 ## State
 
