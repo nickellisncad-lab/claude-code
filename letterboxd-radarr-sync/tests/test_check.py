@@ -97,3 +97,20 @@ def test_check_reports_a_private_watchlist(monkeypatch, tmp_path, capsys):
 
     out = capsys.readouterr().out
     assert "public" in out
+
+
+@responses.activate
+def test_bad_api_key_is_not_reported_as_unreachable(monkeypatch, tmp_path, fixture, capsys):
+    """A 401 proves Radarr IS reachable; saying otherwise misdirects debugging."""
+    _env(monkeypatch, tmp_path)
+    responses.add(responses.GET, f"{RADARR}/system/status", status=401, body="Unauthorized")
+    _watchlist(fixture)
+
+    assert main(["--check"]) == 1
+
+    out = capsys.readouterr().out
+    assert "rejected the API key" in out
+    assert "The URL is correct" in out
+    # The misleading networking advice must not appear for an auth failure.
+    assert "Docker network" not in out
+    assert "cannot reach Radarr" not in out

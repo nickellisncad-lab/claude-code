@@ -174,3 +174,40 @@ def test_repeated_page_content_terminates_the_scrape(fixture):
     watchlist = client.fetch_watchlist("nickelliis")
 
     assert len(watchlist.films) == 2
+
+
+def test_title_year_is_not_printed_twice():
+    """Live markup carries the year in the title attribute too.
+
+    Reported as "Dirty Rotten Scoundrels (1988) (1988)" in a real run.
+    """
+    html = """
+    <h1>someone wants to see 1 film</h1>
+    <ul class="grid"><li class="griditem">
+      <div class="react-component poster"
+           data-item-slug="dirty-rotten-scoundrels"
+           data-item-name="Dirty Rotten Scoundrels (1988)"
+           data-item-full-display-name="Dirty Rotten Scoundrels (1988)"></div>
+    </li></ul>
+    """
+    films, _, _ = parse_watchlist_page(html)
+
+    assert films[0].title == "Dirty Rotten Scoundrels"
+    assert films[0].year == 1988
+    assert str(films[0]) == "Dirty Rotten Scoundrels (1988)"
+
+
+def test_year_in_title_is_kept_when_it_is_not_the_release_year():
+    """Only strip a trailing year that matches the film's actual year."""
+    html = """
+    <h1>someone wants to see 1 film</h1>
+    <ul class="grid"><li class="griditem">
+      <div class="react-component poster" data-item-slug="blade-runner-2049"
+           data-item-name="Blade Runner 2049"
+           data-item-full-display-name="Blade Runner 2049 (2017)"></div>
+    </li></ul>
+    """
+    films, _, _ = parse_watchlist_page(html)
+
+    assert films[0].title == "Blade Runner 2049"
+    assert films[0].year == 2017
