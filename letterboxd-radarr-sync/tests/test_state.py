@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from lbxd_sync.state import Store
@@ -58,3 +60,36 @@ def test_record_film_keeps_known_fields_on_update(store):
     assert row["tmdb_id"] == 496243
     assert row["radarr_id"] == 77
     assert row["detail"] is None
+
+
+def test_unopenable_state_path_gives_an_actionable_error(tmp_path):
+    """A raw sqlite traceback tells you nothing about the real cause.
+
+    In Docker this is almost always a bind-mounted ./data owned by root while
+    the container runs unprivileged. Pointing at a directory reproduces the
+    same sqlite failure without depending on the test user's privileges --
+    chmod-based permission tests are meaningless when running as root.
+    """
+    from lbxd_sync.state import StateError
+
+    with pytest.raises(StateError) as excinfo:
+        Store(str(tmp_path))  # a directory, not a file
+
+    message = str(excinfo.value)
+    assert "cannot open the state database" in message
+    assert "chown" in message
+    assert "uid" in message
+
+
+@pytest.mark.skipif(os.getuid() == 0, reason="root bypasses file permissions")
+def test_unwritable_directory_gives_the_same_error(tmp_path):
+    from lbxd_sync.state import StateError
+
+    locked = tmp_path / "nowrite"
+    locked.mkdir()
+    locked.chmod(0o500)
+    try:
+        with pytest.raises(StateError, match="chown"):
+            Store(str(locked / "state.db"))
+    finally:
+        locked.chmod(0o700)

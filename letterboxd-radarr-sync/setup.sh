@@ -88,14 +88,21 @@ while IFS= read -r line || [ -n "$line" ]; do
         RADARR_API_KEY=*)         printf 'RADARR_API_KEY=%s\n' "$radarr_key" ;;
         RADARR_ROOT_FOLDER=*)     printf 'RADARR_ROOT_FOLDER=%s\n' "$radarr_root" ;;
         RADARR_QUALITY_PROFILE=*) printf 'RADARR_QUALITY_PROFILE=%s\n' "$radarr_profile" ;;
+        PUID=*)                   printf 'PUID=%s\n' "$(id -u)" ;;
+        PGID=*)                   printf 'PGID=%s\n' "$(id -g)" ;;
         *)                        printf '%s\n' "$line" ;;
     esac
 done < .env.example >> .env.tmp
 mv .env.tmp .env
 chmod 600 .env
 
+# Create the state directory now, owned by this user. Left to Docker it is
+# created as root, and the unprivileged container then cannot write to it.
+mkdir -p data
+
 echo
 echo "Wrote .env (permissions 600, readable only by you)."
+echo "Created ./data for the state file, owned by $(id -un) ($(id -u):$(id -g))."
 echo
 
 printf 'Run the read-only connectivity check now? [Y/n] '
