@@ -1,0 +1,19 @@
+services:
+  letterboxd-radarr-sync:
+    build: .
+    # Or, once you have pushed an image somewhere:
+    # image: ghcr.io/nickellisncad-lab/letterboxd-radarr-sync:latest
+    container_name: letterboxd-radarr-sync
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # Holds state.db, which is what stops a restart from re-requesting
+      # every film on both watchlists.
+      - ./data:/data
+    # Uncomment if Radarr runs in another compose stack on its own network.
+    # networks:
+    #   - radarr
+
+# networks:
+#   radarr:
+#     external: true
