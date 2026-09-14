@@ -23,28 +23,65 @@ recognised and left alone.
 
 ## Setup
 
+Run this on the machine that runs Radarr, or anywhere that can reach it.
+
 ```bash
-git clone <this repo>
-cd letterboxd-radarr-sync
+git clone https://github.com/nickellisncad-lab/claude-code.git
+cd claude-code/letterboxd-radarr-sync
 cp .env.example .env
-$EDITOR .env          # at minimum: RADARR_URL, RADARR_API_KEY, RADARR_ROOT_FOLDER
-docker compose up -d
-docker compose logs -f
+$EDITOR .env
+chmod 600 .env          # it holds your Radarr API key
 ```
 
-`RADARR_ROOT_FOLDER` and `RADARR_QUALITY_PROFILE` must match Radarr exactly. If
-they don't, startup fails immediately and the log lists the valid values — it
-won't scrape anything first.
+You need four values from Radarr:
 
-### Check it before letting it write
+| Setting | Where to find it |
+|---|---|
+| `RADARR_API_KEY` | Radarr → Settings → General → Security → API Key |
+| `RADARR_ROOT_FOLDER` | Radarr → Settings → Media Management → Root Folders. Copy it **exactly** — this is the path *as Radarr sees it*, which in Docker is usually `/movies`, not the host path. |
+| `RADARR_QUALITY_PROFILE` | Radarr → Settings → Profiles. Name, case-insensitive. |
+| `RADARR_URL` | See below — this is the one people get wrong. |
+
+### Getting `RADARR_URL` right
+
+| Your setup | Use |
+|---|---|
+| Radarr in the **same** compose stack | `http://radarr:7878` and put this service on that network |
+| Radarr in a **different** Docker stack | `http://<host LAN IP>:7878`, e.g. `http://192.168.1.10:7878` |
+| Radarr directly on the host | `http://<host LAN IP>:7878` |
+
+A bare hostname like `radarr` only resolves if both containers share a Docker
+network. `localhost` never works from inside the container — it means the
+container itself.
+
+### Verify before letting it write anything
+
+```bash
+docker compose run --rm letterboxd-radarr-sync --check
+```
+
+This is read-only: it confirms Radarr is reachable, the API key works, the root
+folder and quality profile exist, the download queue is readable, and both
+watchlists are public — then tells you what the first real run will do. It
+writes nothing to Radarr and does not create the state file. Fix anything it
+flags before continuing.
+
+Then, to see the actual decisions without writing to Radarr:
 
 ```bash
 docker compose run --rm letterboxd-radarr-sync --once --dry-run
 ```
 
-This scrapes both watchlists and logs exactly what it *would* add, without
-touching Radarr. Dry-run results are not treated as done, so the first real run
-still picks those films up.
+### Start it
+
+```bash
+docker compose up -d
+docker compose logs -f
+```
+
+`restart: unless-stopped` means it comes back after a reboot or a Docker
+restart. That is the whole of "keeping it running" — there is no cron to set up,
+no systemd unit to write; the container sleeps between passes on its own.
 
 ## The first run
 

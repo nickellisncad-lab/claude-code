@@ -12,6 +12,7 @@ import threading
 import requests
 
 from . import __version__
+from .check import run_check
 from .config import Config, ConfigError
 from .letterboxd import LetterboxdClient
 from .radarr import RadarrClient, RadarrError
@@ -50,6 +51,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="run a single sync pass and exit instead of polling",
     )
     parser.add_argument(
+        "--check",
+        action="store_true",
+        help="verify Radarr and both watchlists are reachable, then exit; "
+        "writes nothing to Radarr or to the state file",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="report what would be requested without writing to Radarr",
@@ -74,13 +81,14 @@ def main(argv: list[str] | None = None) -> int:
         config = dataclasses.replace(config, dry_run=True)
 
     _configure_logging(config.log_level)
-    log.info(
-        "letterboxd-radarr-sync %s starting (users: %s, interval: %ds%s)",
-        __version__,
-        ", ".join(config.letterboxd_users),
-        config.poll_interval,
-        ", DRY RUN" if config.dry_run else "",
-    )
+    if not args.check:
+        log.info(
+            "letterboxd-radarr-sync %s starting (users: %s, interval: %ds%s)",
+            __version__,
+            ", ".join(config.letterboxd_users),
+            config.poll_interval,
+            ", DRY RUN" if config.dry_run else "",
+        )
 
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
@@ -99,6 +107,10 @@ def main(argv: list[str] | None = None) -> int:
         timeout=config.request_timeout,
         max_retries=config.max_retries,
     )
+
+    if args.check:
+        # Deliberately never opens the real state file.
+        return run_check(config, letterboxd, radarr)
 
     with Store(config.state_path) as store:
         syncer = Syncer(config, letterboxd, radarr, store)
