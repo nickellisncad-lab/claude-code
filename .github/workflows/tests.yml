@@ -1,9 +1,16 @@
 name: tests
 
 on:
+  # Only main on push: a branch with an open PR is already covered by the
+  # pull_request trigger, and listing both runs every job twice.
   push:
-    branches: [main, "claude/**"]
+    branches: [main]
   pull_request:
+
+# Superseded runs are pointless once a newer commit is pushed.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   pytest:
