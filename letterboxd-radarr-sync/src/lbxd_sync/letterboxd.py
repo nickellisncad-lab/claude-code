@@ -27,6 +27,7 @@ BASE_URL = "https://letterboxd.com"
 _COUNT_RE = re.compile(r"wants to see\s+([\d,]+)\s+film", re.IGNORECASE)
 _PAGE_RE = re.compile(r"/page/(\d+)/?$")
 _YEAR_RE = re.compile(r"\((\d{4})\)\s*$")
+_TRAILING_YEAR_RE = re.compile(r"\s*\((\d{4})\)\s*$")
 _TMDB_MOVIE_RE = re.compile(r"themoviedb\.org/movie/(\d+)")
 _FILM_HREF_RE = re.compile(r"^/film/([^/]+)/")
 
@@ -110,6 +111,21 @@ def _first_attr(element, attrs: tuple[str, ...]) -> str | None:
     return None
 
 
+def _strip_trailing_year(title: str, year: int | None) -> str:
+    """Drop a trailing "(1988)" from a title that already carries its year.
+
+    Letterboxd's live markup puts the year in the title attribute as well as
+    the display name, so without this a film renders as
+    "Dirty Rotten Scoundrels (1988) (1988)".
+    """
+    match = _TRAILING_YEAR_RE.search(title)
+    if match and (year is None or int(match.group(1)) == year):
+        stripped = title[: match.start()].strip()
+        if stripped:
+            return stripped
+    return title
+
+
 def _parse_year(display_name: str | None) -> int | None:
     if not display_name:
         return None
@@ -156,8 +172,11 @@ def parse_watchlist_page(html: str) -> tuple[list[Film], int | None, int | None]
         seen.add(slug)
 
         display_name = _first_attr(item, _DISPLAY_ATTRS)
-        title = _first_attr(item, _NAME_ATTRS) or display_name or slug
-        films.append(Film(slug=slug, title=title, year=_parse_year(display_name)))
+        raw_title = _first_attr(item, _NAME_ATTRS) or display_name or slug
+        year = _parse_year(display_name) or _parse_year(raw_title)
+        films.append(
+            Film(slug=slug, title=_strip_trailing_year(raw_title, year), year=year)
+        )
 
     last_page = None
     for anchor in soup.select(".pagination a[href]"):

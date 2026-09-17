@@ -15,6 +15,10 @@ class RadarrError(Exception):
     """A Radarr request failed."""
 
 
+class RadarrAuthError(RadarrError):
+    """Radarr was reached but refused the API key."""
+
+
 class MovieAlreadyExists(RadarrError):
     """Radarr rejected the add because the movie is already in the library."""
 
@@ -85,8 +89,10 @@ class RadarrClient:
 
     def _json(self, method: str, path: str, **kwargs):
         response = self._request(method, path, **kwargs)
-        if response.status_code == 401:
-            raise RadarrError("Radarr rejected the API key (HTTP 401)")
+        if response.status_code in (401, 403):
+            raise RadarrAuthError(
+                f"Radarr rejected the API key (HTTP {response.status_code})"
+            )
         if response.status_code >= 400:
             raise RadarrError(
                 f"{method} {path} returned HTTP {response.status_code}: "

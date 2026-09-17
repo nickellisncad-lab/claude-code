@@ -6,6 +6,7 @@ Kept in SQLite so a container restart never re-requests the whole watchlist.
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,6 +54,10 @@ DONE_STATUSES = {"added", "exists", "no_tmdb_id"}
 RETRY_STATUSES = {"dry_run", "error", "deferred", "pending"}
 
 
+class StateError(Exception):
+    """The state database could not be opened."""
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -62,13 +67,24 @@ class Store:
 
     def __init__(self, path: str) -> None:
         self.path = path
-        if path != ":memory:":
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(path)
-        self.conn.row_factory = sqlite3.Row
-        self.conn.executescript(_SCHEMA)
-        self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-        self.conn.commit()
+        try:
+            if path != ":memory:":
+                Path(path).parent.mkdir(parents=True, exist_ok=True)
+            self.conn = sqlite3.connect(path)
+            self.conn.row_factory = sqlite3.Row
+            self.conn.executescript(_SCHEMA)
+            self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            self.conn.commit()
+        except (sqlite3.OperationalError, OSError) as exc:
+            # Nearly always a bind-mounted ./data owned by root while the
+            # container runs unprivileged. The stack trace for this tells you
+            # nothing useful, so say what it actually is and how to fix it.
+            raise StateError(
+                f"cannot open the state database at {path}: {exc}\n"
+                f"  The container runs as uid {os.getuid()}, so the mounted "
+                f"data directory must be writable by it.\n"
+                f"  Fix with:  sudo chown -R {os.getuid()}:{os.getgid()} data"
+            ) from exc
 
     def close(self) -> None:
         self.conn.close()

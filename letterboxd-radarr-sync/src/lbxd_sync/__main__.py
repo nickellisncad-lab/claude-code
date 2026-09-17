@@ -16,7 +16,7 @@ from .check import run_check
 from .config import Config, ConfigError
 from .letterboxd import LetterboxdClient
 from .radarr import RadarrClient, RadarrError
-from .state import Store
+from .state import StateError, Store
 from .sync import Syncer
 
 log = logging.getLogger("lbxd_sync")
@@ -112,7 +112,13 @@ def main(argv: list[str] | None = None) -> int:
         # Deliberately never opens the real state file.
         return run_check(config, letterboxd, radarr)
 
-    with Store(config.state_path) as store:
+    try:
+        store = Store(config.state_path)
+    except StateError as exc:
+        log.error("%s", exc)
+        return 1
+
+    with store:
         syncer = Syncer(config, letterboxd, radarr, store)
 
         try:

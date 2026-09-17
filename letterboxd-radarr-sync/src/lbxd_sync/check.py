@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from .config import Config
 from .letterboxd import LetterboxdClient, LetterboxdError
-from .radarr import RadarrClient, RadarrError
+from .radarr import RadarrAuthError, RadarrClient, RadarrError
 
 OK = "  [ ok ]"
 BAD = "  [FAIL]"
@@ -28,6 +28,19 @@ def run_check(
     try:
         version = radarr.system_status().get("version", "?")
         print(f"{OK} reachable, version {version}")
+    except RadarrAuthError as exc:
+        # Reached Radarr, so the URL and networking are fine -- only the key
+        # is wrong. Saying "unreachable" here sends people to debug networking.
+        print(f"{OK} reachable at {config.radarr_url}")
+        print(f"{BAD} {exc}")
+        print("       The URL is correct -- Radarr answered. Only the key is wrong.")
+        print(
+            "       Copy it from Settings -> General -> Security, or read it\n"
+            "       straight from the container:\n"
+            "         docker exec radarr sed -n "
+            "'s|.*<ApiKey>\\(.*\\)</ApiKey>.*|\\1|p' /config/config.xml"
+        )
+        problems.append("api key")
     except RadarrError as exc:
         print(f"{BAD} cannot reach Radarr: {exc}")
         print(

@@ -6,6 +6,9 @@ services:
     container_name: letterboxd-radarr-sync
     restart: unless-stopped
     env_file: .env
+    # Run as the host user that owns ./data. setup.sh fills PUID/PGID in
+    # from `id -u` / `id -g`; the 1000 fallback matches the image's own user.
+    user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       # Holds state.db, which is what stops a restart from re-requesting
       # every film on both watchlists.

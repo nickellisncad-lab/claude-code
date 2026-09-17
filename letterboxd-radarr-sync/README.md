@@ -184,6 +184,37 @@ Inspect it directly:
 sqlite3 data/state.db "SELECT title, year, status FROM films ORDER BY updated_at DESC LIMIT 20;"
 ```
 
+## Troubleshooting
+
+**`cannot open the state database ... unable to open database file`**
+
+The `./data` directory is not writable by the user the container runs as.
+This happens when Docker creates `./data` itself, since it makes it `root`-owned
+while the container runs unprivileged. `setup.sh` creates the directory for you
+to avoid this; if you skipped it:
+
+```bash
+mkdir -p data
+sudo chown -R "$(id -u):$(id -g)" data
+```
+
+and make sure `PUID`/`PGID` in `.env` match `id -u` / `id -g`.
+
+**`Radarr rejected the API key (HTTP 401)`**
+
+Radarr answered, so the URL is fine — only the key is wrong. Read it straight
+out of the container rather than copying it by hand:
+
+```bash
+KEY=$(docker exec radarr sed -n 's|.*<ApiKey>\(.*\)</ApiKey>.*|\1|p' /config/config.xml)
+sed -i "s|^RADARR_API_KEY=.*|RADARR_API_KEY=$KEY|" .env
+```
+
+**Changes to the code don't seem to apply**
+
+Compose does not rebuild on source changes. Use `docker compose run --rm --build`
+or `docker compose up -d --build`.
+
 ## Running without Docker
 
 ```bash
