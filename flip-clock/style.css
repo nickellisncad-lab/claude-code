@@ -1,0 +1,264 @@
+:root {
+  --bg-top: #2b2f36;
+  --bg-bottom: #1b1e23;
+  --card-bg-top: #23262c;
+  --card-bg-bottom: #1a1c20;
+  --text-color: #f4f4f2;
+  --shadow: rgba(0, 0, 0, 0.55);
+  --hinge: rgba(0, 0, 0, 0.65);
+  --page-bg-1: #0f1115;
+  --page-bg-2: #1c2028;
+  --label-color: #8b90a0;
+  --colon-color: #6d7280;
+  --accent: #ff5f5f;
+}
+
+:root[data-theme="light"] {
+  --bg-top: #ffffff;
+  --bg-bottom: #eceff3;
+  --card-bg-top: #ffffff;
+  --card-bg-bottom: #e7eaef;
+  --text-color: #21242b;
+  --shadow: rgba(30, 34, 44, 0.25);
+  --hinge: rgba(30, 34, 44, 0.35);
+  --page-bg-1: #dfe4ea;
+  --page-bg-2: #c7cdd6;
+  --label-color: #6b7280;
+  --colon-color: #9aa1ad;
+  --accent: #e0453f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(16px, 4vw, 32px);
+  background: radial-gradient(circle at 50% 20%, var(--page-bg-2), var(--page-bg-1));
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  color: var(--text-color);
+  overflow: hidden;
+  transition: background 0.4s ease, color 0.4s ease;
+}
+
+.theme-toggle {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: none;
+  background: var(--card-bg-top);
+  color: var(--text-color);
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, background 0.4s ease;
+}
+
+.theme-toggle:hover {
+  transform: scale(1.08);
+}
+
+.clock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 2vw, 18px);
+}
+
+.unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-group {
+  display: flex;
+  gap: clamp(4px, 1vw, 8px);
+}
+
+.label {
+  font-size: clamp(10px, 1.4vw, 13px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label-color);
+}
+
+.colon {
+  font-size: clamp(28px, 6vw, 48px);
+  font-weight: 700;
+  color: var(--colon-color);
+  margin: 0 2px;
+  transform: translateY(-10px);
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.25; }
+}
+
+.date {
+  font-size: clamp(12px, 1.6vw, 15px);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--label-color);
+}
+
+/* ---- Flip digit card ---- */
+
+.flip-digit {
+  position: relative;
+  width: clamp(52px, 11vw, 92px);
+  height: clamp(76px, 16vw, 132px);
+  perspective: 400px;
+  border-radius: 8px;
+  background: transparent;
+  filter: drop-shadow(0 6px 10px var(--shadow));
+}
+
+.flip-digit__half {
+  position: relative;
+  width: 100%;
+  height: 50%;
+  overflow: hidden;
+  background: var(--card-bg-top);
+  border-radius: 8px 8px 0 0;
+}
+
+.flip-digit__half.bottom {
+  background: var(--card-bg-bottom);
+  border-radius: 0 0 8px 8px;
+}
+
+.flip-digit__half .digit-text {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 200%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(38px, 9.5vw, 76px);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-color);
+  user-select: none;
+}
+
+.flip-digit__half.top .digit-text {
+  top: 0;
+}
+
+.flip-digit__half.bottom .digit-text {
+  top: -100%;
+}
+
+/* center hinge line */
+.flip-digit::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% - 1px);
+  height: 2px;
+  background: var(--hinge);
+  z-index: 5;
+}
+
+.flip-leaf {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 50%;
+  overflow: hidden;
+  backface-visibility: hidden;
+  z-index: 6;
+}
+
+.flip-leaf .digit-text {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 200%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(38px, 9.5vw, 76px);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-color);
+}
+
+.flip-leaf.leaf-top {
+  top: 0;
+  background: var(--card-bg-top);
+  border-radius: 8px 8px 0 0;
+  transform-origin: bottom;
+  animation: flipTop 0.32s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.flip-leaf.leaf-top .digit-text {
+  top: 0;
+}
+
+.flip-leaf.leaf-bottom {
+  top: 50%;
+  background: var(--card-bg-bottom);
+  border-radius: 0 0 8px 8px;
+  transform-origin: top;
+  transform: rotateX(90deg);
+  animation: flipBottom 0.32s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: 0.32s;
+}
+
+.flip-leaf.leaf-bottom .digit-text {
+  top: -100%;
+}
+
+.flip-leaf::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.35));
+  pointer-events: none;
+}
+
+.flip-leaf.leaf-bottom::before {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.35));
+}
+
+@keyframes flipTop {
+  0% { transform: rotateX(0deg); }
+  100% { transform: rotateX(-90deg); }
+}
+
+@keyframes flipBottom {
+  0% { transform: rotateX(90deg); }
+  100% { transform: rotateX(0deg); }
+}
+
+@media (max-width: 480px) {
+  .clock {
+    gap: 4px;
+  }
+  .colon {
+    margin: 0;
+  }
+}

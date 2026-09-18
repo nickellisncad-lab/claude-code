@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flip Clock</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+
+  <main class="clock" id="clock">
+    <div class="unit" id="unit-hours">
+      <div class="label">Hours</div>
+    </div>
+    <div class="colon">:</div>
+    <div class="unit" id="unit-minutes">
+      <div class="label">Minutes</div>
+    </div>
+    <div class="colon">:</div>
+    <div class="unit" id="unit-seconds">
+      <div class="label">Seconds</div>
+    </div>
+  </main>
+
+  <div class="date" id="date"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
